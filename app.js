@@ -116,4 +116,4 @@ function imp(f){f.text().then(t=>{const d=JSON.parse(t);if(!d.logs||!d.metrics)t
 
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{if(b.dataset.t=="today"){sel=iso(new Date());pick=null}go(b.dataset.t)});
 go("today");
-if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js");
+if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>r.update());let _r=0;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(!_r){_r=1;location.reload()}});document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")navigator.serviceWorker.getRegistration().then(r=>r&&r.update())})}
