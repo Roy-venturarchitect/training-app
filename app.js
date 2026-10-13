@@ -1,5 +1,5 @@
 const PG=window.PROGRAMME,K="roytrain.v1";
-let S=JSON.parse(localStorage.getItem(K)||"null")||{start:iso(new Date()),days:[1,3,5],checks:{},logs:{},metrics:[]};
+let S=JSON.parse(localStorage.getItem(K)||"null")||{start:iso(new Date()),days:[1,3,5],checks:{},logs:{},metrics:[]};S.load=S.load||{};S.bells=S.bells||{L:"",M:"",H:""};
 function save(){localStorage.setItem(K,JSON.stringify(S))}
 function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)}
 function pd(s){const[a,b,c]=s.split("-");return new Date(a,b-1,c)}
@@ -12,22 +12,26 @@ function render(){({today,cal,log,body,settings})[tab]()}
 function week(ds){return Math.max(1,Math.floor((pd(ds)-pd(S.start))/864e5/7)+1)}
 
 /* TODAY */
+const LN={L:"Light",M:"Medium",H:"Heavy"};
+function loadOf(e){return S.load[e.id]||e.load}
+function setLoad(id,v){S.load[id]=v;save();document.querySelectorAll(`[data-ld="${id}"] button`).forEach(b=>b.classList.toggle("on",b.dataset.v==v));const c=document.querySelector(`[data-lc="${id}"]`);if(c)c.textContent=LN[v]}
+function loadPicker(e){return `<div class="tag">Load</div><div class="seg ld" data-ld="${e.id}">${["L","M","H"].map(v=>`<button data-v="${v}" class="${loadOf(e)==v?"on":""}" onclick="setLoad('${e.id}','${v}')">${LN[v]}${S.bells[v]?`<small>${esc(S.bells[v])}</small>`:""}</button>`).join("")}</div><div class="sub">Suggested: ${LN[e.load]}. ${esc(PG.loadNote)}</div>`}
 function exHTML(e,ds){const c=(S.checks[ds]||{})[e.id];const yt="https://www.youtube.com/results?search_query="+encodeURIComponent(e.q);
-return `<div class="card"><details><summary class="ex">${figureSVG(e.svg)}<div class="t"><h3>${esc(e.name)}</h3><div class="dose">${esc(e.dose)}</div><div class="sub">Tap for how-to</div></div>
+return `<div class="card exc ${c?"isdone":""}"><details data-id="${e.id}"><summary class="ex">${figureSVG(e.svg,"thumb")}<div class="t"><h3>${esc(e.name)}</h3><div class="dose">${esc(e.dose)}</div><div class="meta">${e.load?`<span class="chip" data-lc="${e.id}">${LN[loadOf(e)]}</span>`:""}<span class="more">How-to ›</span></div></div>
 <button class="chk ${c?"done":""}" onclick="event.preventDefault();tick('${ds}','${e.id}')">${c?"✓":""}</button></summary>
-<div class="det">${figureSVG(e.svg)}<div class="tag">Steps</div><ol>${e.steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
+<div class="det">${figureSVG(e.svg)}<div class="legend"><i class="lg-hl"></i>working muscles / joints <i class="lg-ar"></i>movement</div>${e.load?loadPicker(e):""}<div class="tag">Steps</div><ol>${e.steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
 <div class="tag">Key cues</div><ul>${e.cues.map(s=>`<li>${esc(s)}</li>`).join("")}</ul>
 <div class="tag">Easier / joint-friendly option</div><div class="easy">${esc(e.easier)}</div>
 <div class="row" style="margin-top:10px"><a class="btn s" href="${yt}" target="_blank" rel="noopener">▶ Demo videos</a>
 ${e.timer?`<button class="btn s" onclick="startTimer(${e.timer.emom?`'emom',${e.timer.emom}`:`'secs',${e.timer.secs}`})">⏱ ${e.timer.emom?"EMOM timer":"Hold timer"}</button>`:""}</div></div></details></div>`}
-function tick(ds,id){(S.checks[ds]=S.checks[ds]||{})[id]=!(S.checks[ds][id]);save();render()}
+function tick(ds,id){(S.checks[ds]=S.checks[ds]||{})[id]=!(S.checks[ds][id]);save();const y=scrollY,open=[...document.querySelectorAll("details[open]")].map(d=>d.dataset.id);render();open.forEach(i=>{const d=document.querySelector(`details[data-id="${i}"]`);if(d)d.open=true});scrollTo(0,y);navigator.vibrate&&navigator.vibrate(15)}
 function today(){const t=pick||dayType(sel)||"A";const blocks=["prep",t,"fin"];
 const all=blocks.flatMap(b=>PG.blocks[b].ex),done=all.filter(e=>(S.checks[sel]||{})[e.id]).length;
 $("main").innerHTML=`<div class="sub">${DN[pd(sel).getDay()]} ${sel} · Week ${week(sel)} ${dayType(sel)?"· Scheduled Day "+dayType(sel):"· Rest day (extra session OK)"}</div>
 <div class="seg">${["A","B","C"].map(d=>`<button class="${d==t?"on":""}" onclick="pick='${d}';render()">Day ${d}</button>`).join("")}</div>
 <div class="card"><div class="timer" id="tm">${fmt(el())}</div><div class="sub" id="tml" style="text-align:center">Session timer</div>
 <div class="row" style="justify-content:center;margin-top:8px"><button class="btn" onclick="tgl()">${T.run?"Pause":"Start"}</button><button class="btn s" onclick="rst()">Reset</button></div></div>
-<div class="sub">${done}/${all.length} exercises ticked · ${esc(PG.progression)}</div>
+<div class="prog"><span style="width:${Math.round(done/all.length*100)}%"></span></div><div class="sub">${done}/${all.length} exercises ticked · ${esc(PG.progression)}</div>
 ${blocks.map(b=>{const B=PG.blocks[b];return `<h2>${esc(B.name)} <span class="sub">${esc(B.time)}</span></h2><div class="sub">${esc(B.note)}</div>${B.ex.map(e=>exHTML(e,sel)).join("")}`}).join("")}
 <button class="btn" style="width:100%;margin-top:14px" onclick="openLog('${sel}','${t}')">Finish & log session</button>`}
 /* timers */
@@ -68,11 +72,12 @@ function openLog(ds,t){tab="log";document.querySelectorAll("nav button").forEach
  <label>Neck feel</label><input id="ln" value="${esc(L.neck)}">
  <label>Notes</label><textarea id="lo" rows="3">${esc(L.notes)}</textarea>
  <button class="btn" style="width:100%" onclick="saveLog('${ds}')">Save</button></div>`}
-function saveLog(old){const ds=$("#ld").value;if(old!=ds)delete S.logs[old];S.logs[ds]={day:$("#lt").value,completed:$("#lc").checked,min:$("#lm").value,rpe:+$("#lr").value,ankle:$("#la").value,knee:$("#lk").value,neck:$("#ln").value,notes:$("#lo").value};save();go("log")}
+function loadsFor(d){const o={};["prep",d,"fin"].forEach(b=>PG.blocks[b].ex.forEach(e=>{if(e.load)o[e.name]=LN[loadOf(e)]}));return o}
+function saveLog(old){const ds=$("#ld").value,prev=S.logs[old];if(old!=ds)delete S.logs[old];S.logs[ds]={day:$("#lt").value,loads:(prev&&prev.loads&&prev.day==$("#lt").value)?prev.loads:loadsFor($("#lt").value),completed:$("#lc").checked,min:$("#lm").value,rpe:+$("#lr").value,ankle:$("#la").value,knee:$("#lk").value,neck:$("#ln").value,notes:$("#lo").value};save();go("log")}
 function log(){const ks=Object.keys(S.logs).sort().reverse();
  $("main").innerHTML=`<div class="row" style="justify-content:space-between"><h2>Session log</h2><button class="btn" onclick="openLog('${iso(new Date())}','${dayType(iso(new Date()))||"A"}')">+ Log</button></div>
  ${ks.length?ks.map(k=>{const L=S.logs[k];return `<div class="card" onclick="openLog('${k}','${L.day}')"><b>${k}</b> · Day ${L.day} ${L.completed?"✅":"⏸"} · RPE ${L.rpe}${L.min?` · ${L.min} min`:""}
- <div class="sub">${["Ankles:"+esc(L.ankle),"Knees:"+esc(L.knee),"Neck:"+esc(L.neck)].filter(x=>!x.endsWith(":")).join(" · ")}</div>${L.notes?`<div>${esc(L.notes)}</div>`:""}</div>`}).join(""):`<div class="card sub">No sessions logged yet.</div>`}`}
+ <div class="sub">${["Ankles:"+esc(L.ankle),"Knees:"+esc(L.knee),"Neck:"+esc(L.neck)].filter(x=>!x.endsWith(":")).join(" · ")}</div>${L.notes?`<div>${esc(L.notes)}</div>`:""}${L.loads?`<div class="sub">Load: ${Object.entries(L.loads).map(([k,v])=>esc(k)+" "+v).join(" · ")}</div>`:""}</div>`}).join(""):`<div class="card sub">No sessions logged yet.</div>`}`}
 
 /* BODY */
 const MF=[["weight","Weight (kg)"],["waist","Waist (cm)"],["hr","Resting HR (bpm)"],["ktw","Knee-to-wall ankle (cm, L/R avg)"],["sq","Deep squat hold (s)"]];let mk="weight";
@@ -98,6 +103,8 @@ function draw(pts){const c=$("#cv"),r=devicePixelRatio||1,w=c.clientWidth,h=180;
 function settings(){$("main").innerHTML=`<h2>Settings</h2><div class="card"><label>Programme start date (Week 1)</label><input type="date" id="ss" value="${S.start}">
  <label>Training days (sessions A, B, C in order)</label><div class="seg">${[1,2,3,4,5,6,0].map(d=>`<button class="${S.days.includes(d)?"on":""}" onclick="tday(${d})">${DN[d]}</button>`).join("")}</div>
  <button class="btn" onclick="S.start=ss.value;save();alert('Saved')">Save start date</button></div>
+ <div class="card"><h3>My kettlebells</h3><p class="sub">Optional: note which bells you use for each category (e.g. Light = 8kg).</p>
+ ${["L","M","H"].map(v=>`<label>${LN[v]}</label><input id="b_${v}" value="${esc(S.bells[v])}" placeholder="e.g. ${{L:"8kg",M:"12kg",H:"16kg"}[v]}" onchange="S.bells['${v}']=this.value;save()">`).join("")}</div>
  <div class="card"><h3>Backup</h3><p class="sub">Data lives only on this phone. Export regularly.</p><div class="row"><button class="btn" onclick="exp()">Export JSON</button><button class="btn s" onclick="fi.click()">Import JSON</button></div>
  <input type="file" id="fi" accept="application/json,.json" style="display:none" onchange="imp(this.files[0])"></div>
  <div class="card sub">${esc(PG.title)} · ${esc(PG.phase)}</div>`}
